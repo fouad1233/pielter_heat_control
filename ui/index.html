@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peltier Heat Control Dashboard</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #ffffff; padding: 20px; }
+    .container { max-width: 600px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    h1 { text-align: center; }
+    .card { background: #2c2c2c; padding: 15px; margin: 15px 0; border-radius: 8px; }
+    .btn { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-bottom: 10px; width: 100%; }
+    .btn:disabled { background: #555; cursor: not-allowed; }
+    .btn-connect { background: #28a745; }
+    .btn-disconnect { background: #dc3545; }
+    .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    input[type=range] { width: 100%; margin: 10px 0; }
+    input[type=number] { padding: 5px; font-size: 16px; width: 80px; border-radius: 5px; border: 1px solid #ccc; background: #333; color: white; }
+    .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #2196F3; }
+    input:checked + .slider:before { transform: translateX(26px); }
+    .temp-display { font-size: 2.5em; text-align: center; font-weight: bold; margin: 10px 0; color: #ffeb3b; }
+    .bar-value { text-align: center; font-weight: bold; margin-bottom: 5px;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Peltier Controller</h1>
+    
+    <button id="connectBtn" class="btn btn-connect">Connect to Arduino</button>
+    <button id="disconnectBtn" class="btn btn-disconnect" style="display:none;">Disconnect</button>
+
+    <div class="card">
+      <div class="row">
+        <span>Current Temperature</span>
+        <span>Auto/PID Mode</span>
+      </div>
+      <div class="row">
+        <div class="temp-display" id="tempDisplay">-- °C</div>
+        <label class="switch">
+          <input type="checkbox" id="autoModeToggle" disabled>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card" id="manualCard">
+      <h3>Manual Control</h3>
+      <div class="bar-value">PWM: <span id="pwmValue">0</span></div>
+      <input type="range" id="pwmSlider" min="-1024" max="1024" value="0" disabled>
+      <div class="row">
+        <span style="color:#2196F3;">Cold (-1024)</span>
+        <span style="color:#f44336;">Warm (1024)</span>
+      </div>
+    </div>
+
+    <div class="card" id="autoCard" style="opacity: 0.5;">
+      <h3>Auto Control (PID)</h3>
+      <div class="row">
+        <label for="setpointInput">Target Temperature (°C):</label>
+        <input type="number" id="setpointInput" value="25.0" step="0.5" disabled>
+      </div>
+      <button id="setSetpointBtn" class="btn" disabled>Apply Setup</button>
+    </div>
+  </div>
+
+  <script>
+    let port, reader, writer, readStream, keepReading = true;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const tempDisplay = document.getElementById('tempDisplay');
+    const pwmSlider = document.getElementById('pwmSlider');
+    const pwmValue = document.getElementById('pwmValue');
+    const autoModeToggle = document.getElementById('autoModeToggle');
+    const setpointInput = document.getElementById('setpointInput');
+    const setSetpointBtn = document.getElementById('setSetpointBtn');
+    const manualCard = document.getElementById('manualCard');
+    const autoCard = document.getElementById('autoCard');
+
+    // UI Updates
+    autoModeToggle.addEventListener('change', (e) => {
+      const isAuto = e.target.checked;
+      pwmSlider.disabled = isAuto;
+      setpointInput.disabled = !isAuto;
+      setSetpointBtn.disabled = !isAuto;
+      manualCard.style.opacity = isAuto ? 0.5 : 1;
+      autoCard.style.opacity = isAuto ? 1 : 0.5;
+      sendState();
+    });
+
+    pwmSlider.addEventListener('input', (e) => {
+      pwmValue.innerText = e.target.value;
+    });
+
+    pwmSlider.addEventListener('change', () => sendState());
+
+    setSetpointBtn.addEventListener('click', () => sendState());
+
+    async function sendState() {
+      if (!writer) return;
+      const data = {
+        mode: autoModeToggle.checked ? "auto" : "manual",
+        pwm: parseInt(pwmSlider.value),
+        setpoint: parseFloat(setpointInput.value)
+      };
+      await writer.write(JSON.stringify(data) + '\n');
+    }
+
+    // Web Serial Connection
+    connectBtn.addEventListener('click', async () => {
+      if (!('serial' in navigator)) {
+        alert("Web Serial API is not supported in this browser. Please use Chrome/Edge.");
+        return;
+      }
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        connectBtn.style.display = 'none';
+        disconnectBtn.style.display = 'block';
+        autoModeToggle.disabled = false;
+        if(!autoModeToggle.checked) pwmSlider.disabled = false;
+
+        const textEncoder = new TextEncoderStream();
+        const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+        writer = textEncoder.writable.getWriter();
+
+        readLoop();
+      } catch (err) {
+        console.error('Connection error:', err);
+      }
+    });
+
+    disconnectBtn.addEventListener('click', async () => {
+      keepReading = false;
+      if (reader) { await reader.cancel(); }
+      if (writer) { await writer.close(); }
+      await port.close();
+      connectBtn.style.display = 'block';
+      disconnectBtn.style.display = 'none';
+      autoModeToggle.disabled = true;
+      pwmSlider.disabled = true;
+      setpointInput.disabled = true;
+      setSetpointBtn.disabled = true;
+    });
+
+    async function readLoop() {
+      keepReading = true;
+      const textDecoder = new TextDecoderStream();
+      readStream = port.readable.pipeTo(textDecoder.writable);
+      reader = textDecoder.readable.getReader();
+
+      let buffer = "";
+      try {
+        while (keepReading) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += value;
+          let lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep incomplete line
+          for (let line of lines) {
+            line = line.trim();
+            if (line.startsWith('{')) {
+              try {
+                const data = JSON.parse(line);
+                updateDashboard(data);
+              } catch (e) { }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Read error", error);
+      } finally {
+        reader.releaseLock();
+      }
+    }
+
+    let lastSentPwm = null;
+
+    function updateDashboard(data) {
+      if (data.temp !== undefined) {
+        tempDisplay.innerText = data.temp.toFixed(1) + " °C";
+      }
+      
+      // Override UI values if controlled from device (buttons)
+      if (data.mode && data.mode !== (autoModeToggle.checked ? "auto" : "manual")) {
+        autoModeToggle.checked = (data.mode === "auto");
+        autoModeToggle.dispatchEvent(new Event('change'));
+      }
+
+      if (data.mode === "manual" && data.pwm !== undefined && parseInt(pwmSlider.value) !== data.pwm) {
+        // Prevent feedback loop jitter
+        pwmSlider.value = data.pwm;
+        pwmValue.innerText = data.pwm;
+      } else if (data.mode === "auto" && data.pwm !== undefined) {
+         pwmValue.innerText = data.pwm + " (auto)";
+         pwmSlider.value = data.pwm;
+      }
+    }
+  </script>
+</body>
+</html>
