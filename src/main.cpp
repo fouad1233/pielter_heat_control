@@ -23,8 +23,9 @@ double pidOutput = 0.0;
 int manualPwm = 0; // Ranges strictly from -255 to +255 
 
 // PID object mapping to PID logic (direct implies higher temp -> positive action, we must be careful with polarity)
-// Note: REVERSE because if current temp >= setpoint, we want negative PWM (Cooling). 
-PID myPID(&currentTemp, &pidOutput, &setpoint, 5.0, 0.5, 1.0, REVERSE); 
+// Note: DIRECT means if current temp < setpoint, output generates a POSITIVE error causing positive PWM (Heating).
+// If current temp > setpoint, output goes NEGATIVE (Cooling).
+PID myPID(&currentTemp, &pidOutput, &setpoint, 5.0, 0.5, 1.0, DIRECT); 
 
 unsigned long lastUpdate = 0;
 unsigned long lastButtonCheck = 0;
