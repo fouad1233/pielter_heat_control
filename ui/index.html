@@ -65,6 +65,11 @@
       </div>
       <button id="setSetpointBtn" class="btn" disabled>Apply Setup</button>
     </div>
+
+    <div class="card">
+      <h3>Debug Terminal</h3>
+      <textarea id="debugTerminal" readonly style="width: 100%; height: 150px; background: #000; color: #0f0; border: none; padding: 5px; font-family: monospace;"></textarea>
+    </div>
   </div>
 
   <script>
@@ -80,8 +85,12 @@
     const setSetpointBtn = document.getElementById('setSetpointBtn');
     const manualCard = document.getElementById('manualCard');
     const autoCard = document.getElementById('autoCard');
+    const debugTerminal = document.getElementById('debugTerminal');
 
-    // UI Updates
+    function logToTerminal(text) {
+      debugTerminal.value += text + '\n';
+      debugTerminal.scrollTop = debugTerminal.scrollHeight;
+    }
     autoModeToggle.addEventListener('change', (e) => {
       const isAuto = e.target.checked;
       pwmSlider.disabled = isAuto;
@@ -107,7 +116,9 @@
         pwm: parseInt(pwmSlider.value),
         setpoint: parseFloat(setpointInput.value)
       };
-      await writer.write(JSON.stringify(data) + '\n');
+      const jsonStr = JSON.stringify(data);
+      logToTerminal("-> " + jsonStr);
+      await writer.write(jsonStr + '\n');
     }
 
     // Web Serial Connection
@@ -137,15 +148,22 @@
 
     disconnectBtn.addEventListener('click', async () => {
       keepReading = false;
-      if (reader) { await reader.cancel(); }
-      if (writer) { await writer.close(); }
-      await port.close();
+      try {
+        if (reader) await reader.cancel();
+        if (writer) await writer.close();
+        if (port) await port.close();
+      } catch (e) {
+        console.warn("Error during disconnect: ", e);
+      }
       connectBtn.style.display = 'block';
       disconnectBtn.style.display = 'none';
       autoModeToggle.disabled = true;
       pwmSlider.disabled = true;
+      pwmSlider.value = 0;
+      pwmValue.innerText = "0";
       setpointInput.disabled = true;
       setSetpointBtn.disabled = true;
+      tempDisplay.innerText = "-- °C";
     });
 
     async function readLoop() {
@@ -164,6 +182,9 @@
           buffer = lines.pop(); // Keep incomplete line
           for (let line of lines) {
             line = line.trim();
+            if (line.length > 0) {
+              logToTerminal("<- " + line);
+            }
             if (line.startsWith('{')) {
               try {
                 const data = JSON.parse(line);
@@ -192,10 +213,12 @@
         autoModeToggle.dispatchEvent(new Event('change'));
       }
 
-      if (data.mode === "manual" && data.pwm !== undefined && parseInt(pwmSlider.value) !== data.pwm) {
-        // Prevent feedback loop jitter
-        pwmSlider.value = data.pwm;
-        pwmValue.innerText = data.pwm;
+      if (data.mode === "manual" && data.pwm !== undefined) {
+        // Only update UI from device if we are not actively sliding
+        if (parseInt(pwmSlider.value) !== data.pwm && document.activeElement !== pwmSlider) {
+          pwmSlider.value = data.pwm;
+          pwmValue.innerText = data.pwm;
+        }
       } else if (data.mode === "auto" && data.pwm !== undefined) {
          pwmValue.innerText = data.pwm + " (auto)";
          pwmSlider.value = data.pwm;

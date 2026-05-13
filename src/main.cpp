@@ -2,7 +2,7 @@
 #include <ArduinoJson.h>
 #include <PID_v1.h>
 
-#define PIN_LPWM 4
+#define PIN_LPWM 11 // Changed to D11 (supports hardware PWM)
 #define PIN_RPWM 3
 #define PIN_L_EN 2
 #define PIN_BTN_RED 8
@@ -92,7 +92,8 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   
-  // Handle Buttons
+  // Handle Buttons (Disabled for now)
+  /*
   if (now - lastButtonCheck > 50) {
     lastButtonCheck = now;
     if (digitalRead(PIN_BTN_RED) == LOW) {
@@ -102,10 +103,9 @@ void loop() {
     else if (digitalRead(PIN_BTN_BLUE) == LOW) {
       autoMode = false;
       manualPwm = -255; // Max Cold
-    } else {
-      // You can implement custom behavior when button is released here.
     }
   }
+  */
   
   // Main telemetry loop & PID processing
   if (now - lastUpdate > 500) {
@@ -129,6 +129,8 @@ void loop() {
     long mappedPwm = map((long)outPwm, -255, 255, -1024, 1024);
     doc["pwm"] = mappedPwm;
     doc["setpoint"] = setpoint;
+    doc["btn_red"] = digitalRead(PIN_BTN_RED);
+    doc["btn_blue"] = digitalRead(PIN_BTN_BLUE);
     
     serializeJson(doc, Serial);
     Serial.println();

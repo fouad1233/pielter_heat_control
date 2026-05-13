@@ -12,7 +12,7 @@ A purely frontend `ui/index.html` file can connect directly to your Arduino Nano
 | Component   | Pin / Connection       | Note                                                                       |
 | ----------- | ---------------------- | -------------------------------------------------------------------------- |
 | **Peltier** | M+ / M- on H-Bridge    | Ensure proper thermal dissipation (heatsinks/fans) on BOTH sides.          |
-| **H-Bridge**| LPWM -> D4             | PWM for one direction.                                                     |
+| **H-Bridge**| LPWM -> D11            | PWM for one direction.                                                     |
 |             | RPWM -> D3             | PWM for opposite direction.                                                |
 |             | L_EN -> D2             | Logic Enable.                                                              |
 |             | R_EN -> GND (or D2)    | *Note: BTS7960 usually requires both EN pins HIGH for bi-directional. Try linking R_EN and L_EN to D2.* |
