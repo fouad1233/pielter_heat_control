@@ -5,8 +5,8 @@
 #define PIN_LPWM 11 // Changed to D11 (supports hardware PWM)
 #define PIN_RPWM 3
 #define PIN_L_EN 2
-#define PIN_BTN_RED 8
-#define PIN_BTN_BLUE 7
+#define PIN_LED_RED 6
+#define PIN_LED_BLUE 7
 #define PIN_NTC A7
 
 // NTC Parameters
@@ -60,15 +60,21 @@ void setPeltier(int pwmValue) {
     // Warm Mode
     analogWrite(PIN_LPWM, pwmValue);
     analogWrite(PIN_RPWM, 0);
+    digitalWrite(PIN_LED_RED, HIGH);
+    digitalWrite(PIN_LED_BLUE, LOW);
   } else if (pwmValue < 0) {
     // Cold Mode
     analogWrite(PIN_LPWM, 0);
     analogWrite(PIN_RPWM, -pwmValue);
+    digitalWrite(PIN_LED_RED, LOW);
+    digitalWrite(PIN_LED_BLUE, HIGH);
   } else {
     // Idle 
     analogWrite(PIN_LPWM, 0);
     analogWrite(PIN_RPWM, 0);
     digitalWrite(PIN_L_EN, LOW);
+    digitalWrite(PIN_LED_RED, LOW);
+    digitalWrite(PIN_LED_BLUE, LOW);
   }
 }
 
@@ -79,9 +85,10 @@ void setup() {
   pinMode(PIN_RPWM, OUTPUT);
   pinMode(PIN_L_EN, OUTPUT);
   
-  // NTC Pin setup is not strictly needed for analogRead on Nano A7
-  pinMode(PIN_BTN_RED, INPUT_PULLUP);
-  pinMode(PIN_BTN_BLUE, INPUT_PULLUP);
+  pinMode(PIN_LED_RED, OUTPUT);
+  pinMode(PIN_LED_BLUE, OUTPUT);
+  digitalWrite(PIN_LED_RED, LOW);
+  digitalWrite(PIN_LED_BLUE, LOW);
   
   setPeltier(0);
   
@@ -130,8 +137,6 @@ void loop() {
     long mappedPwm = map((long)outPwm, -255, 255, -1024, 1024);
     doc["pwm"] = mappedPwm;
     doc["setpoint"] = setpoint;
-    doc["btn_red"] = digitalRead(PIN_BTN_RED);
-    doc["btn_blue"] = digitalRead(PIN_BTN_BLUE);
     
     serializeJson(doc, Serial);
     Serial.println();
